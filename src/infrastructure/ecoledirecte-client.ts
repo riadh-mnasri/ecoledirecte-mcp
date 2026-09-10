@@ -12,6 +12,8 @@ import {
 
 const API_BASE = "https://api.ecoledirecte.com/v3";
 const API_VERSION = "4.101.4";
+const USER_AGENT =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36";
 
 const LoginResponseSchema = z.object({
   code: z.number(),
@@ -57,11 +59,31 @@ export class EcoleDirecteHttpClient implements EcoleDirecteClient {
   private token: string | undefined;
   private familyId: number | undefined;
   private cachedStudents: Student[] | undefined;
+  private sessionCookie: string | undefined;
 
   constructor(private readonly credentials: Credentials) {}
 
+  private async fetchGtk(): Promise<{ gtk: string; cookieHeader: string }> {
+    const res = await fetch(`${API_BASE}/login.awp?gtk=1&v=${API_VERSION}`, {
+      method: "GET",
+      headers: { "User-Agent": USER_AGENT },
+    });
+
+    const cookies = res.headers.getSetCookie();
+    const gtkCookie = cookies.find((c) => c.startsWith("GTK="));
+    if (!gtkCookie) {
+      throw new Error("Échec de connexion EcoleDirecte : impossible de récupérer le cookie GTK");
+    }
+    return {
+      gtk: gtkCookie.split(";")[0].split("=")[1],
+      cookieHeader: cookies.map((c) => c.split(";")[0]).join("; "),
+    };
+  }
+
   private async ensureLoggedIn(): Promise<string> {
     if (this.token) return this.token;
+
+    const { gtk, cookieHeader } = await this.fetchGtk();
 
     const body = new URLSearchParams({
       data: JSON.stringify({
@@ -74,7 +96,12 @@ export class EcoleDirecteHttpClient implements EcoleDirecteClient {
 
     const res = await fetch(`${API_BASE}/login.awp?v=${API_VERSION}`, {
       method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "User-Agent": USER_AGENT,
+        "X-Gtk": gtk,
+        Cookie: cookieHeader,
+      },
       body,
     });
 
@@ -96,6 +123,7 @@ export class EcoleDirecteHttpClient implements EcoleDirecteClient {
     }
 
     this.token = parsed.data.token;
+    this.sessionCookie = cookieHeader;
     const account = parsed.data.data?.accounts[0];
     this.familyId = account?.id;
     this.cachedStudents = (account?.profile?.eleves ?? []).map((eleve) => ({
@@ -114,6 +142,8 @@ export class EcoleDirecteHttpClient implements EcoleDirecteClient {
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
         "X-Token": token,
+        "User-Agent": USER_AGENT,
+        ...(this.sessionCookie ? { Cookie: this.sessionCookie } : {}),
       },
       body: new URLSearchParams({ data: "{}" }),
     });
