@@ -1,7 +1,7 @@
 {
   "name": "ecoledirecte-mcp",
   "version": "0.1.0",
-  "description": "Serveur MCP privé pour interroger son compte EcoleDirecte (notes, devoirs, absences, messages) depuis Claude.",
+  "description": "Serveur MCP pour interroger un compte EcoleDirecte (notes, devoirs, absences, messages) depuis Claude, en local, sans jamais partager ses identifiants avec qui que ce soit.",
   "main": "dist/index.js",
   "directories": {
     "test": "tests"
@@ -12,11 +12,15 @@
     "build": "tsc",
     "start": "node dist/index.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "UNLICENSED",
+  "keywords": [
+    "mcp",
+    "ecoledirecte",
+    "claude",
+    "claude-desktop"
+  ],
+  "author": "Riadh MNASRI",
+  "license": "MIT",
   "type": "module",
-  "private": "true",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
     "dotenv": "^17.4.2",
@@ -27,5 +31,23 @@
     "tsx": "^4.23.13",
     "typescript": "^7.0.2",
     "vitest": "^5.0.0"
+  },
+  "bin": {
+    "ecoledirecte-mcp": "dist/index.js",
+    "ecoledirecte-mcp-init": "dist/cli/init.js"
+  },
+  "homepage": "https://github.com/riadh-mnasri/ecoledirecte-mcp",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/riadh-mnasri/ecoledirecte-mcp.git"
+  },
+  "files": [
+    "dist",
+    ".env.example",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
   }
 }

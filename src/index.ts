@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import "dotenv/config";
 import { join } from "node:path";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";

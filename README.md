@@ -1,6 +1,17 @@
 # EcoleDirecte MCP
 
-Serveur MCP privé qui permet à Claude de lire les données de mon compte EcoleDirecte (notes, devoirs, absences, messages) directement en conversation, sans passer par le site.
+Serveur MCP qui permet à Claude de lire les données d'un compte EcoleDirecte (notes, devoirs, absences, messages) directement en conversation, sans passer par le site.
+
+## Un modèle à copier, pas un service
+
+Ce projet n'est pas un service auquel tu te connectes : c'est un programme que **chaque famille installe et fait tourner chez elle**, avec ses propres identifiants EcoleDirecte. Aucun serveur central, aucune base de données, personne d'autre que toi ne voit jamais ton identifiant ou ton mot de passe : ils restent dans un fichier `.env` sur ta machine.
+
+Concrètement, ça veut dire :
+- Pas de compte à créer, pas d'inscription
+- Pas de responsabilité de stockage de données d'autrui, de RGPD ou de sécurité côté "fournisseur" : il n'y a pas de fournisseur, juste un outil que tu copies
+- Si tu veux l'adapter, l'améliorer ou le comprendre, le code est fait pour ça (voir "Architecture" plus bas)
+
+C'est un point de départ technique à réutiliser pour ta propre famille, pas un produit à laquelle t'abonner.
 
 ## Important : API non officielle
 
@@ -30,7 +41,15 @@ EcoleDirecte n'expose aucune API publique documentée. Ce serveur s'appuie sur l
 - `zod` pour la validation des réponses API
 - `vitest` pour les tests
 
-## Installation
+## Installation rapide
+
+```bash
+npx ecoledirecte-mcp-init
+```
+
+Un assistant en ligne de commande demande l'identifiant et le mot de passe EcoleDirecte, écrit le fichier `.env` correspondant, et affiche le bloc de config à coller dans Claude Desktop.
+
+## Installation manuelle (développement)
 
 ```bash
 npm install
@@ -68,8 +87,8 @@ Dans la config Claude Desktop (`~/Library/Application Support/Claude/claude_desk
 {
   "mcpServers": {
     "ecoledirecte": {
-      "command": "node",
-      "args": ["/Users/riadh/IdeaProjects/ecoledirecte-mcp/dist/index.js"],
+      "command": "npx",
+      "args": ["-y", "ecoledirecte-mcp"],
       "env": {
         "ECOLEDIRECTE_USERNAME": "...",
         "ECOLEDIRECTE_PASSWORD": "..."
@@ -79,7 +98,7 @@ Dans la config Claude Desktop (`~/Library/Application Support/Claude/claude_desk
 }
 ```
 
-Penser à lancer `npm run build` avant, ou remplacer `command`/`args` par `npx tsx src/index.ts` en développement.
+`npx ecoledirecte-mcp-init` affiche ce bloc automatiquement avec les identifiants déjà remplis. En développement local (avant publication npm), remplacer par `"command": "node", "args": ["/chemin/vers/ecoledirecte-mcp/dist/index.js"]`.
 
 ## Outils MCP exposés
 
@@ -98,6 +117,10 @@ Penser à lancer `npm run build` avant, ou remplacer `command`/`args` par `npx t
 - `src/mcp/` : exposition des outils MCP, orchestre fetch live + fallback cache
 
 Cette isolation permet de ne corriger que l'adapter le jour où EcoleDirecte change son API, sans toucher aux outils exposés à Claude.
+
+## Licence
+
+MIT, voir [LICENSE](LICENSE). Copie, adapte, réutilise pour ta propre famille.
 
 ---
 
