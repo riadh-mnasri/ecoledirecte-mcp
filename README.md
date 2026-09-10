@@ -29,6 +29,15 @@ EcoleDirecte n'expose aucune API publique documentée. Ce serveur s'appuie sur l
 - URL et paramètres de `viescolaire.awp` (absences/retards) et `familles/{id}/messages.awp` (messages)
 - Version d'API réelle : `4.101.4`
 
+### Le login exige une poignée de main GTK
+
+`login.awp` refuse silencieusement des identifiants pourtant valides (`Identifiant et/ou mot de passe invalide !`) si l'appel ne reproduit pas exactement le protocole attendu :
+
+1. `GET /v3/login.awp?gtk=1&v=<version>` renvoie deux `Set-Cookie`, dont un nommé `GTK=...`.
+2. Le `POST` de login doit inclure le header `X-Gtk` avec cette valeur **et** renvoyer les cookies reçus à l'étape 1 dans un header `Cookie` classique — sans ce header `Cookie`, l'API répond `code: 200` côté navigateur mais rejette l'appel côté serveur pour la même requête, avec le même message trompeur qu'un mauvais mot de passe.
+
+`ensureLoggedIn()` dans `src/infrastructure/ecoledirecte-client.ts` fait les deux. Si ce comportement disparaît après une évolution de l'API, revérifier ce flow avant de soupçonner les identifiants.
+
 ### Ce qui reste à vérifier
 
 - La forme exacte du corps de réponse de `viescolaire.awp` et de `messages.awp` (URLs confirmées, schémas encore best-effort) : ces deux outils peuvent échouer au premier usage réel, il faudra alors ajuster `src/infrastructure/ecoledirecte-client.ts`.
