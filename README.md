@@ -47,23 +47,17 @@ EcoleDirecte n'expose aucune API publique documentée. Ce serveur s'appuie sur l
 npx ecoledirecte-mcp-init
 ```
 
-Un assistant en ligne de commande demande l'identifiant et le mot de passe EcoleDirecte, écrit le fichier `.env` correspondant, et affiche le bloc de config à coller dans Claude Desktop.
+Un assistant en ligne de commande demande l'identifiant et le mot de passe EcoleDirecte et écrit `~/.ecoledirecte-mcp/.env` (en dehors du dossier du projet, pour que ça reste stable même installé via `npx`).
 
 ## Installation manuelle (développement)
 
 ```bash
 npm install
-cp .env.example .env
+npm run build
+node dist/cli/init.js
 ```
 
-Remplir `.env` avec les identifiants EcoleDirecte (les mêmes que sur le site) :
-
-```
-ECOLEDIRECTE_USERNAME=...
-ECOLEDIRECTE_PASSWORD=...
-```
-
-Ce fichier ne doit jamais être commité (il est dans `.gitignore`).
+`.env.example` documente les deux variables attendues (`ECOLEDIRECTE_USERNAME`, `ECOLEDIRECTE_PASSWORD`) si tu préfères écrire `~/.ecoledirecte-mcp/.env` à la main. Ce fichier ne doit jamais être commité dans le projet lui-même.
 
 ### Premier login et double authentification
 
@@ -79,6 +73,14 @@ npm run build  # compilation TypeScript vers dist/
 
 Aucun port réseau : ce n'est pas une application web, le serveur communique uniquement via stdin/stdout.
 
+## Connexion à Claude Code
+
+```bash
+claude mcp add ecoledirecte -- npx -y ecoledirecte-mcp
+```
+
+(en développement local, avant publication npm : `claude mcp add ecoledirecte -- node /chemin/vers/ecoledirecte-mcp/dist/index.js`)
+
 ## Connexion à Claude Desktop
 
 Dans la config Claude Desktop (`~/Library/Application Support/Claude/claude_desktop_config.json`) :
@@ -88,17 +90,13 @@ Dans la config Claude Desktop (`~/Library/Application Support/Claude/claude_desk
   "mcpServers": {
     "ecoledirecte": {
       "command": "npx",
-      "args": ["-y", "ecoledirecte-mcp"],
-      "env": {
-        "ECOLEDIRECTE_USERNAME": "...",
-        "ECOLEDIRECTE_PASSWORD": "..."
-      }
+      "args": ["-y", "ecoledirecte-mcp"]
     }
   }
 }
 ```
 
-`npx ecoledirecte-mcp-init` affiche ce bloc automatiquement avec les identifiants déjà remplis. En développement local (avant publication npm), remplacer par `"command": "node", "args": ["/chemin/vers/ecoledirecte-mcp/dist/index.js"]`.
+Dans les deux cas, les identifiants sont lus depuis `~/.ecoledirecte-mcp/.env` (voir "Installation rapide"), pas besoin de les répéter dans la config.
 
 ## Outils MCP exposés
 
