@@ -4,12 +4,24 @@ Serveur MCP privé qui permet à Claude de lire les données de mon compte Ecole
 
 ## Important : API non officielle
 
-EcoleDirecte n'expose aucune API publique documentée. Ce serveur s'appuie sur l'API interne du site (`api.ecoledirecte.com`), reverse-engineered à partir de projets communautaires existants. Conséquences concrètes :
+EcoleDirecte n'expose aucune API publique documentée. Ce serveur s'appuie sur l'API interne du site (`api.ecoledirecte.com`). Conséquences concrètes :
 
 - Le format des réponses peut changer sans préavis. Chaque endpoint est validé par un schéma (`zod`) : en cas de changement, l'outil renvoie une erreur explicite plutôt que des données silencieusement fausses.
 - En cas d'échec du live, chaque outil retombe automatiquement sur le dernier résultat mis en cache (dossier `.cache/`, jamais commité) en signalant qu'il s'agit de données potentiellement périmées.
 - Ce serveur est une couche de confort, pas le seul accès aux données : en cas de panne, se reconnecter manuellement sur ecoledirecte.com reste toujours possible.
-- Les schémas de `src/infrastructure/ecoledirecte-client.ts` sont basés sur la structure connue de la communauté, pas sur une capture réseau vérifiée. À ajuster si besoin après un premier essai réel (devtools réseau du site, onglet Network, en filtrant sur `api.ecoledirecte.com`).
+
+### Ce qui a été vérifié par capture réseau réelle (2026-09-10)
+
+- `login.awp` : structure des comptes/élèves (`data.accounts[].profile.eleves[]`)
+- `notes.awp` : moyennes par matière et par période (`data.periodes[].ensembleMatieres.disciplines[]`), sans note individuelle par évaluation observée cette année (aucune note encore saisie au moment du test)
+- `cahierdetexte.awp` (liste) + `cahierdetexte/{date}.awp` (détail, contenu encodé en base64/HTML) pour les devoirs
+- URL et paramètres de `viescolaire.awp` (absences/retards) et `familles/{id}/messages.awp` (messages)
+- Version d'API réelle : `4.101.4`
+
+### Ce qui reste à vérifier
+
+- La forme exacte du corps de réponse de `viescolaire.awp` et de `messages.awp` (URLs confirmées, schémas encore best-effort) : ces deux outils peuvent échouer au premier usage réel, il faudra alors ajuster `src/infrastructure/ecoledirecte-client.ts`.
+- La forme des notes individuelles (par évaluation) une fois que des notes seront saisies dans le trimestre en cours.
 
 ## Stack
 

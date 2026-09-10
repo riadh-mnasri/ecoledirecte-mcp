@@ -11,7 +11,7 @@ import {
 } from "../domain/types.js";
 
 const API_BASE = "https://api.ecoledirecte.com/v3";
-const API_VERSION = "4.60.0";
+const API_VERSION = "4.101.4";
 
 const LoginResponseSchema = z.object({
   code: z.number(),
@@ -26,18 +26,16 @@ const LoginResponseSchema = z.object({
           nom: z.string(),
           profile: z
             .object({
-              classe: z.object({ libelle: z.string() }).optional(),
+              eleves: z
+                .array(
+                  z.object({
+                    id: z.number(),
+                    prenom: z.string(),
+                    nom: z.string(),
+                  }),
+                )
+                .optional(),
             })
-            .optional(),
-          eleves: z
-            .array(
-              z.object({
-                id: z.number(),
-                prenom: z.string(),
-                nom: z.string(),
-                classe: z.object({ libelle: z.string() }).optional(),
-              }),
-            )
             .optional(),
         }),
       ),
@@ -50,8 +48,14 @@ interface Credentials {
   password: string;
 }
 
+function decodeBase64Html(value: string): string {
+  const html = Buffer.from(value, "base64").toString("utf-8");
+  return html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+}
+
 export class EcoleDirecteHttpClient implements EcoleDirecteClient {
   private token: string | undefined;
+  private familyId: number | undefined;
   private cachedStudents: Student[] | undefined;
 
   constructor(private readonly credentials: Credentials) {}
@@ -92,24 +96,13 @@ export class EcoleDirecteHttpClient implements EcoleDirecteClient {
     }
 
     this.token = parsed.data.token;
-    this.cachedStudents = (parsed.data.data?.accounts ?? []).flatMap((account) => {
-      if (account.eleves && account.eleves.length > 0) {
-        return account.eleves.map((eleve) => ({
-          id: eleve.id,
-          firstName: eleve.prenom,
-          lastName: eleve.nom,
-          className: eleve.classe?.libelle,
-        }));
-      }
-      return [
-        {
-          id: account.id,
-          firstName: account.prenom,
-          lastName: account.nom,
-          className: account.profile?.classe?.libelle,
-        },
-      ];
-    });
+    const account = parsed.data.data?.accounts[0];
+    this.familyId = account?.id;
+    this.cachedStudents = (account?.profile?.eleves ?? []).map((eleve) => ({
+      id: eleve.id,
+      firstName: eleve.prenom,
+      lastName: eleve.nom,
+    }));
 
     return this.token;
   }
@@ -146,56 +139,96 @@ export class EcoleDirecteHttpClient implements EcoleDirecteClient {
   async getGrades(studentId: number): Promise<Grade[]> {
     const schema = z.object({
       data: z.object({
-        notes: z.array(
+        periodes: z.array(
           z.object({
-            id: z.union([z.string(), z.number()]).transform(String),
-            matiere: z.string(),
-            valeur: z.string(),
-            noteSur: z.string(),
-            coef: z.string().optional(),
-            date: z.string(),
-            devoir: z.string().optional(),
+            periode: z.string(),
+            ensembleMatieres: z.object({
+              disciplines: z.array(
+                z.object({
+                  id: z.union([z.string(), z.number()]).transform(String),
+                  discipline: z.string(),
+                  moyenne: z.string(),
+                  moyenneClasse: z.string().optional(),
+                  moyenneMin: z.string().optional(),
+                  moyenneMax: z.string().optional(),
+                  coef: z.union([z.string(), z.number()]).transform(String).optional(),
+                }),
+              ),
+            }),
           }),
         ),
       }),
     });
     const parsed = await this.post(`/eleves/${studentId}/notes.awp`, schema, "&verbe=get");
-    return parsed.data.notes.map((n) => ({
-      id: n.id,
-      subject: n.matiere,
-      value: n.valeur,
-      scale: n.noteSur,
-      coefficient: n.coef,
-      date: n.date,
-      comment: n.devoir,
-    }));
+    return parsed.data.periodes.flatMap((periode) =>
+      periode.ensembleMatieres.disciplines
+        .filter((d) => d.moyenne !== "")
+        .map((d) => ({
+          id: `${periode.periode}-${d.id}`,
+          subject: d.discipline,
+          value: d.moyenne,
+          scale: "20",
+          coefficient: d.coef,
+          date: periode.periode,
+          comment: d.moyenneClasse ? `Moyenne de classe : ${d.moyenneClasse}` : undefined,
+        })),
+    );
   }
 
   async getHomework(studentId: number): Promise<HomeworkItem[]> {
-    const schema = z.object({
+    const listSchema = z.object({
       data: z.record(
         z.string(),
         z.array(
           z.object({
             matiere: z.string(),
-            aFaire: z.object({ contenu: z.string().optional() }).optional(),
-            done: z.boolean().optional(),
+            idDevoir: z.number(),
+            donneLe: z.string(),
+            effectue: z.boolean(),
           }),
         ),
       ),
     });
-    const parsed = await this.post(`/eleves/${studentId}/cahierdetexte.awp`, schema, "&verbe=get");
-    return Object.entries(parsed.data).flatMap(([dueDate, items]) =>
-      items.map((item) => ({
-        subject: item.matiere,
-        dueDate,
-        description: item.aFaire?.contenu ?? "",
-        done: item.done ?? false,
-      })),
+    const detailSchema = z.object({
+      data: z.object({
+        matieres: z.array(
+          z.object({
+            matiere: z.string(),
+            aFaire: z.object({ contenu: z.string().optional() }).optional(),
+          }),
+        ),
+      }),
+    });
+
+    const list = await this.post(`/Eleves/${studentId}/cahierdetexte.awp`, listSchema, "&verbe=get");
+
+    const entries = Object.entries(list.data);
+    const perDate = await Promise.all(
+      entries.map(async ([dueDate, items]) => {
+        const detail = await this.post(
+          `/Eleves/${studentId}/cahierdetexte/${dueDate}.awp`,
+          detailSchema,
+          "&verbe=get",
+        );
+        return items.map((item): HomeworkItem => {
+          const matiereDetail = detail.data.matieres.find((m) => m.matiere === item.matiere);
+          const contenu = matiereDetail?.aFaire?.contenu;
+          return {
+            subject: item.matiere,
+            dueDate,
+            description: contenu ? decodeBase64Html(contenu) : "",
+            done: item.effectue,
+          };
+        });
+      }),
     );
+
+    return perDate.flat();
   }
 
   async getAbsences(studentId: number): Promise<AbsenceItem[]> {
+    // Endpoint confirmé (`/eleves/{id}/viescolaire.awp`), mais forme exacte de la réponse
+    // non vérifiée par capture réseau : à ajuster au premier échec de schéma en usage réel.
     const schema = z.object({
       data: z.object({
         absencesRetards: z.array(
@@ -222,6 +255,9 @@ export class EcoleDirecteHttpClient implements EcoleDirecteClient {
   }
 
   async getMessages(): Promise<MessageItem[]> {
+    // Endpoint et paramètres confirmés (`/familles/{familyId}/messages.awp?typeRecuperation=received...`),
+    // mais forme exacte du corps de la réponse non vérifiée : à ajuster au premier échec de schéma.
+    await this.ensureLoggedIn();
     const schema = z.object({
       data: z.object({
         messages: z.object({
@@ -237,7 +273,11 @@ export class EcoleDirecteHttpClient implements EcoleDirecteClient {
         }),
       }),
     });
-    const parsed = await this.post("/familles/0/messages.awp", schema, "&typeRecuperation=received");
+    const parsed = await this.post(
+      `/familles/${this.familyId}/messages.awp`,
+      schema,
+      "&typeRecuperation=received&orderBy=date&order=desc&onlyRead=0&getAll=1",
+    );
     return parsed.data.messages.received;
   }
 }
