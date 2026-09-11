@@ -7,7 +7,7 @@ import { FileCache } from "./infrastructure/file-cache.js";
 import { createServer } from "./mcp/server.js";
 import { CONFIG_DIR } from "./config-dir.js";
 
-loadDotenv({ path: join(CONFIG_DIR, ".env") });
+loadDotenv({ path: join(CONFIG_DIR, ".env"), quiet: true });
 
 const username = process.env.ECOLEDIRECTE_USERNAME;
 const password = process.env.ECOLEDIRECTE_PASSWORD;
