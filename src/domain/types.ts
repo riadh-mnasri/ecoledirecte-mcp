@@ -42,6 +42,7 @@ export const MessageItemSchema = z.object({
   subject: z.string(),
   date: z.string(),
   read: z.boolean(),
+  content: z.string().optional(),
 });
 export type MessageItem = z.infer<typeof MessageItemSchema>;
 

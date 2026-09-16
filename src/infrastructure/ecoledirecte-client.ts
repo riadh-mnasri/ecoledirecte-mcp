@@ -135,7 +135,7 @@ export class EcoleDirecteHttpClient implements EcoleDirecteClient {
     return this.token;
   }
 
-  private async post<T>(endpoint: string, schema: z.ZodType<T>, query = ""): Promise<T> {
+  private async post<T>(endpoint: string, schema: z.ZodType<T>, query = "", retried = false): Promise<T> {
     const token = await this.ensureLoggedIn();
     const res = await fetch(`${API_BASE}${endpoint}?v=${API_VERSION}${query}`, {
       method: "POST",
@@ -150,10 +150,24 @@ export class EcoleDirecteHttpClient implements EcoleDirecteClient {
 
     if (res.status === 403) {
       this.token = undefined;
-      return this.post(endpoint, schema, query);
+      return this.post(endpoint, schema, query, true);
     }
 
     const raw = await res.json();
+
+    // Une session expirée renvoie une erreur applicative (`code` JSON != 200) avec un statut HTTP 200,
+    // ce que le cas ci-dessus (403) ne couvre pas. Sans ce contrôle, l'erreur de session est prise à tort
+    // pour un changement de format d'API (EcoleDirecteApiShapeError) par le safeParse ci-dessous.
+    if (raw && typeof raw === "object" && "code" in raw && (raw as { code: unknown }).code !== 200) {
+      const code = (raw as { code: unknown }).code;
+      const message = (raw as { message?: string }).message ?? `code ${code}`;
+      if (!retried) {
+        this.token = undefined;
+        return this.post(endpoint, schema, query, true);
+      }
+      throw new Error(`Erreur API EcoleDirecte sur ${endpoint} : ${message}`);
+    }
+
     const parsed = schema.safeParse(raw);
     if (!parsed.success) {
       throw new EcoleDirecteApiShapeError(endpoint, parsed.error);
@@ -285,16 +299,22 @@ export class EcoleDirecteHttpClient implements EcoleDirecteClient {
   }
 
   async getMessages(): Promise<MessageItem[]> {
-    // Endpoint et paramètres confirmés (`/familles/{familyId}/messages.awp?typeRecuperation=received...`),
-    // mais forme exacte du corps de la réponse non vérifiée : à ajuster au premier échec de schéma.
+    // Endpoint et paramètres confirmés par capture réseau :
+    // - `verbe=get` est requis, sinon l'API renvoie code 225 "Paramètres spécifiés incorrects" sans champ `data`.
+    // - `onlyRead=1` est requis pour obtenir la liste complète (contre-intuitif : `onlyRead=0` renvoie 0 résultat).
+    // - La liste ne contient pas le corps du message (`content` vide) : il faut un appel détail par message.
     await this.ensureLoggedIn();
-    const schema = z.object({
+    const listSchema = z.object({
       data: z.object({
         messages: z.object({
           received: z.array(
             z.object({
               id: z.union([z.string(), z.number()]).transform(String),
-              from: z.string(),
+              from: z.object({
+                civilite: z.string().optional(),
+                prenom: z.string().optional(),
+                nom: z.string().optional(),
+              }),
               subject: z.string(),
               date: z.string(),
               read: z.boolean(),
@@ -303,11 +323,34 @@ export class EcoleDirecteHttpClient implements EcoleDirecteClient {
         }),
       }),
     });
-    const parsed = await this.post(
+    const list = await this.post(
       `/familles/${this.familyId}/messages.awp`,
-      schema,
-      "&typeRecuperation=received&orderBy=date&order=desc&onlyRead=0&getAll=1",
+      listSchema,
+      "&verbe=get&typeRecuperation=received&orderBy=date&order=desc&onlyRead=1&getAll=1",
     );
-    return parsed.data.messages.received;
+
+    const detailSchema = z.object({
+      data: z.object({
+        content: z.string().optional(),
+      }),
+    });
+
+    return Promise.all(
+      list.data.messages.received.map(async (item): Promise<MessageItem> => {
+        const detail = await this.post(
+          `/familles/${this.familyId}/messages/${item.id}.awp`,
+          detailSchema,
+          "&verbe=get&mode=destinataire",
+        );
+        return {
+          id: item.id,
+          from: [item.from.civilite, item.from.prenom, item.from.nom].filter(Boolean).join(" "),
+          subject: item.subject,
+          date: item.date,
+          read: item.read,
+          content: detail.data.content ? decodeBase64Html(detail.data.content) : undefined,
+        };
+      }),
+    );
   }
 }
