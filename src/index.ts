@@ -21,7 +21,10 @@ if (!username || !password) {
 }
 
 const client = new EcoleDirecteHttpClient({ username, password });
-const cache = new FileCache(join(CONFIG_DIR, "cache"));
+// Un dossier de cache par compte : plusieurs instances du serveur (un compte par établissement)
+// ne doivent jamais se renvoyer les données en cache l'une de l'autre.
+const cacheDir = process.env.ECOLEDIRECTE_CACHE_DIR ?? join(CONFIG_DIR, "cache", username.replace(/[^\w.-]/g, "_"));
+const cache = new FileCache(cacheDir);
 const server = createServer(client, cache);
 
 const transport = new StdioServerTransport();
