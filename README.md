@@ -18,7 +18,7 @@ C'est un point de départ technique à réutiliser pour ta propre famille, pas u
 EcoleDirecte n'expose aucune API publique documentée. Ce serveur s'appuie sur l'API interne du site (`api.ecoledirecte.com`). Conséquences concrètes :
 
 - Le format des réponses peut changer sans préavis. Chaque endpoint est validé par un schéma (`zod`) : en cas de changement, l'outil renvoie une erreur explicite plutôt que des données silencieusement fausses.
-- En cas d'échec du live, chaque outil retombe automatiquement sur le dernier résultat mis en cache (dossier `.cache/`, jamais commité) en signalant qu'il s'agit de données potentiellement périmées.
+- En cas d'échec du live, chaque outil retombe automatiquement sur le dernier résultat mis en cache (dossier `~/.ecoledirecte-mcp/cache/<identifiant>/`, un par compte) en signalant qu'il s'agit de données potentiellement périmées.
 - Ce serveur est une couche de confort, pas le seul accès aux données : en cas de panne, se reconnecter manuellement sur ecoledirecte.com reste toujours possible.
 
 ### Ce qui a été vérifié par capture réseau réelle (2026-09-10)
@@ -89,6 +89,18 @@ claude mcp add ecoledirecte -- npx -y ecoledirecte-mcp
 ```
 
 (en développement local, avant publication npm : `claude mcp add ecoledirecte -- node /chemin/vers/ecoledirecte-mcp/dist/index.js`)
+
+### Plusieurs établissements (un compte par école)
+
+Un compte EcoleDirecte est lié à un établissement. Si tes enfants sont dans des écoles différentes, enregistre une instance du serveur par compte, en passant les identifiants en variables d'environnement (elles priment sur le `.env`) :
+
+```bash
+claude mcp add ecoledirecte-ecole2 -s user \
+  -e ECOLEDIRECTE_USERNAME=identifiant2 -e ECOLEDIRECTE_PASSWORD=motdepasse2 \
+  -- npx -y ecoledirecte-mcp
+```
+
+Chaque compte a son propre dossier de cache (`~/.ecoledirecte-mcp/cache/<identifiant>/`, modifiable avec `ECOLEDIRECTE_CACHE_DIR`), pour que le repli sur le cache ne mélange jamais les données de deux comptes.
 
 ## Connexion à Claude Desktop
 
